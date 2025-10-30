@@ -65,6 +65,18 @@ feeds = {
         "seen_ids_name": "seen_ids_alken_fund.json",
         "site_title": "Alken Fund",
     },
+    "multitude_se": {
+        "rss_url": "https://cdn.reputation.onclusive.com/Rss.aspx?crypt=14D1989EB96679B0EEA61D40DB85F47BCE4368742A77DC9AFC82E7BCCDB895C9",
+        "xml_name": "multitude_se_rss.xml",
+        "seen_ids_name": "seen_ids_multitude_se.json",
+        "site_title": "Multitude SE",
+    },
+    "robus_capital": {
+        "rss_url": "https://cdn.reputation.onclusive.com/Rss.aspx?crypt=59DB29A4D56CE6A0D3B6946155AAEA5A4BBD0972C3AB64811A58EE282BE4DB42",
+        "xml_name": "robus_capital_rss.xml",
+        "seen_ids_name": "seen_ids_robus_capital.json",
+        "site_title": "Robus Capital",
+    },
 }
 
 def get_xml_dir():

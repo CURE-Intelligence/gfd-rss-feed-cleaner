@@ -165,6 +165,7 @@ def extract_simple_fields(entry):
         "pubDate": pubdate or "",
     }
 
+
 for feed_key, config in feeds.items():
     rss_url = config["rss_url"]
     xml_name = config["xml_name"]
@@ -187,19 +188,72 @@ for feed_key, config in feeds.items():
     else:
         seen_ids = set()
 
+    # Load existing items from XML (preserving order), mapping idClip → item data dict
+    existing_items_dict = {}  # idClip -> Element
+    existing_items_list = []  # List of dicts to preserve XML order (oldest-to-newest)
+
+    if os.path.exists(xml_path):
+        try:
+            tree = ET.parse(xml_path)
+            root = tree.getroot()
+            ch = root.find('channel')
+            if ch is not None:
+                for item_elem in ch.findall('item'):
+                    # Extract idClip from guid
+                    guid_elem = item_elem.find('guid')
+                    if guid_elem is not None and guid_elem.text:
+                        id_clip = guid_elem.text.strip()
+                    else:
+                        continue
+                    # For fields: title, link, author, description, pubDate
+                    entry = {
+                        'idClip': id_clip,
+                        'title': (item_elem.find('title').text or "") if item_elem.find('title') is not None else "",
+                        'link': (item_elem.find('link').text or "") if item_elem.find('link') is not None else "",
+                        'author': (item_elem.find('author').text or "") if item_elem.find('author') is not None else "",
+                        'description': (item_elem.find('description').text or "") if item_elem.find('description') is not None else "",
+                        'pubDate': (item_elem.find('pubDate').text or "") if item_elem.find('pubDate') is not None else "",
+                    }
+                    existing_items_list.append(entry)
+                    existing_items_dict[id_clip] = entry
+        except Exception:
+            # If parsing fails, treat as empty
+            existing_items_dict = {}
+            existing_items_list = []
+
     feed = feedparser.parse(rss_url)
     new_items = []
+    new_item_dicts = []
     # Use idClip as the true unique id for all logic
     for entry in feed.entries:
         data = extract_simple_fields(entry)
         item_id = data["idClip"]
         if not item_id:
             continue  # skip if no idClip
-        if item_id not in seen_ids:
+        if (item_id not in seen_ids) and (item_id not in existing_items_dict):
             new_items.append(data)
+            new_item_dicts.append(data)
 
-    # If there are new_items, write them as the only items in a new XML.
-    # If there are NO new_items, create an empty RSS xml (channel but no items).
+    # Compose the items to write: newest items on top
+    # The order: [newest (from this run), ... oldest (from previous runs)]
+    # New items: order as in feedparser parsing (most recent on top, as feed usually provides)
+    # So: new_items (in order they were collected, which is newest first), then existing_items_list (oldest to newest)
+    # But ensure we don't duplicate IDs
+    all_items = []
+    written_ids = set()  # To track already written ids
+
+    # First, write new items (from *this* run only)
+    for data in new_items:
+        all_items.append(data)
+        written_ids.add(data['idClip'])
+
+    # Now, append older items (preserving original XML order), skipping any id written above
+    for data in existing_items_list:
+        if data['idClip'] not in written_ids:
+            all_items.append(data)
+            written_ids.add(data['idClip'])
+
+    # If there are no new nor old, just create empty channel
     rss_elem = ET.Element('rss', {'version': '2.0'})
     channel = ET.SubElement(rss_elem, 'channel')
     ET.SubElement(channel, 'title').text = site_title
@@ -207,38 +261,34 @@ for feed_key, config in feeds.items():
     ET.SubElement(channel, 'description').text = site_title
     ET.SubElement(channel, 'lastBuildDate').text = email.utils.formatdate(time.time())
 
-    written_ids = set(seen_ids) # to add new seen ids if needed
-    
-    if new_items:
-        for data in new_items:
-            item = ET.SubElement(channel, 'item')
-            idclip_val = data['idClip']
-            if idclip_val:
-                guid = ET.SubElement(item, 'guid')
-                guid.text = idclip_val
-                guid.attrib['isPermaLink'] = "false"
-            title_cleaned = clean_text_for_xml(data['title'] or "")
-            desc_cleaned = clean_text_for_xml(data['description'] or "")
+    for data in all_items:
+        item = ET.SubElement(channel, 'item')
+        idclip_val = data['idClip']
+        if idclip_val:
+            guid = ET.SubElement(item, 'guid')
+            guid.text = idclip_val
+            guid.attrib['isPermaLink'] = "false"
+        title_cleaned = clean_text_for_xml(data['title'] or "")
+        desc_cleaned = clean_text_for_xml(data['description'] or "")
 
-            ET.SubElement(item, 'title').text = title_cleaned
-            ET.SubElement(item, 'link').text = data['link'] or ""
-            if data['author']:
-                ET.SubElement(item, 'author').text = data['author']
-            if desc_cleaned:
-                ET.SubElement(item, 'description').text = desc_cleaned
-            if data['pubDate']:
-                ET.SubElement(item, 'pubDate').text = data['pubDate']
-
-            written_ids.add(idclip_val)
+        ET.SubElement(item, 'title').text = title_cleaned
+        ET.SubElement(item, 'link').text = data['link'] or ""
+        if data['author']:
+            ET.SubElement(item, 'author').text = data['author']
+        if desc_cleaned:
+            ET.SubElement(item, 'description').text = desc_cleaned
+        if data['pubDate']:
+            ET.SubElement(item, 'pubDate').text = data['pubDate']
 
     xmlstr = prettify(rss_elem)
     if not xmlstr.startswith('<?xml'):
         xmlstr = '<?xml version="1.0" encoding="utf-8"?>\n' + xmlstr
 
-    # Overwrite the XML file every time, not appending or merging with the old.
     with open(xml_path, "w", encoding="utf-8", newline='\n') as f:
         f.write(xmlstr)
 
     # Update seen_ids with all ids seen so far + any new ones we just wrote.
+    updated_seen_ids = set(seen_ids)
+    updated_seen_ids.update([data['idClip'] for data in new_items])
     with open(seen_ids_path, "w") as f:
-        json.dump(list(written_ids), f)
+        json.dump(list(updated_seen_ids), f)

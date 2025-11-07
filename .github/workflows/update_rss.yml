@@ -1,0 +1,38 @@
+name: Update RSS Feed
+
+on:
+  schedule:
+    - cron: '0 9 * * *' # every day at 9 am
+  workflow_dispatch: # also allows manual run
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repo
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run RSS Filter Script
+      run: python main.py
+
+    - name: Commit and Push
+      run: |
+        git config --local user.email "github-actions@github.com"
+        git config --local user.name "GitHub Actions"
+        git add feeds/ seen_ids/
+        git commit -m "Update RSS feed [skip ci]" || echo "No changes to commit"
+        git push

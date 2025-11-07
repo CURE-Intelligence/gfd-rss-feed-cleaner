@@ -1,0 +1,4 @@
+feedparser>=6.0.0
+feedgen>=1.0.0
+requests>=2.25.0
+lxml>=4.6.0

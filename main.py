@@ -77,6 +77,12 @@ feeds = {
         "seen_ids_name": "seen_ids_robus_capital.json",
         "site_title": "Robus Capital RSS Feed",
     },
+    "cnbc_dach": {
+        "rss_url": "https://cdn.reputation.onclusive.com/Rss.aspx?crypt=C112688F71E8F3DB556C0A48DCB39F1E4A83C3ACD4377343D6511761D0C42581",
+        "xml_name": "cnbc_dach_rss_feed.xml",
+        "seen_ids_name": "seen_ids_cnbc_dach.json",
+        "site_title": "CNBC Dach RSS Feed",
+    },
 }
 
 def get_xml_dir():
